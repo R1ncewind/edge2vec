@@ -4,7 +4,7 @@ use existing matrix to run edge2vec
 
 import argparse
 import random
-from typing import Any, Mapping, Optional
+from typing import Optional
 
 import numpy as np
 from gensim.models import Word2Vec
@@ -94,13 +94,8 @@ def _get_walk(graph, walk_length, start_node, matrix, p, q):
             walk.append(next)
         else:
             prev = walk[-2]
-            try:
-                pre_edge_type = graph.edges[prev, cur]['type'] - 1
-            except KeyError as e:
-                print(f'Source: {prev}')
-                print(f'Target: {cur}')
-                print(e)
-                raise e
+
+            pre_edge_type = graph.edges[prev, cur]['type'] - 1
 
             distance_sum = 0
             for neighbor in cur_nbrs:
@@ -141,7 +136,7 @@ def _get_walk(graph, walk_length, start_node, matrix, p, q):
                 elif neighbor == prev:
                     threshold += transition_probability * neighbor_link_weight
                     if threshold >= rand:
-                        next_link_end_node = neighbor
+                        next = neighbor
                         break
                 else:
                     threshold += transition_probability * neighbor_link_weight / q
