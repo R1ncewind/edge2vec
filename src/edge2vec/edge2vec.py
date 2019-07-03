@@ -181,7 +181,6 @@ def train(
         q: Optional[float] = None,
         window: Optional[int] = None,
         size: Optional[int] = None,
-        **word2vec_kwargs
 ) -> Word2Vec:
     walks = get_walks(
         graph,
@@ -191,7 +190,12 @@ def train(
         p,
         q,
     )
-    return Word2Vec(list(walks), **word2vec_kwargs)
+    return Word2Vec(
+        list(walks),
+        size=size or 100,
+        window=window or 5,
+    )
+
 
 
 def main():
