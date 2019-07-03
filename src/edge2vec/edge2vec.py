@@ -179,6 +179,8 @@ def train(
         walk_length: Optional[int] = None,
         p: Optional[float] = None,
         q: Optional[float] = None,
+        window: Optional[int] = None,
+        size: Optional[int] = None,
         **word2vec_kwargs
 ) -> Word2Vec:
     walks = get_walks(
