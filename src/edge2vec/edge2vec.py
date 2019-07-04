@@ -10,8 +10,10 @@ import numpy as np
 from gensim.models import Word2Vec
 
 from .utils import read_graph
+from tqdm import trange, tqdm
 
-
+from multiprocessing import Pool, cpu_count
+from functools import partial
 def parse_args():
     '''
     Parses the node2vec arguments.
@@ -64,91 +66,107 @@ def parse_args():
     return parser.parse_args()
 
 
-def get_walks(graph, num_walks, walk_length, matrix, p, q):
+def get_walks_slow(graph, num_walks, walk_length, matrix, p, q):
     """Generate random walk paths constrainted by transition matrix."""
     walks = []
-    nodes = list(graph.nodes())
-    print('Walk iteration:')
-    for walk_iter in range(num_walks):
-        print(str(walk_iter + 1), '/', str(num_walks))
-        random.shuffle(nodes)
-        for node in nodes:
-            # print "chosen node id: ",nodes
-            walks.append(_get_walk(graph, walk_length, node, matrix, p, q))
+    it = _iterate_nodes(graph, num_walks)
+    for walk_iter in trange(num_walks, desc='Walk Iteration'):
+        walks.append(_get_walk(graph, walk_length, node, matrix, p, q))
     return walks
 
 
-def _get_walk(graph, walk_length, start_node, matrix, p, q):
+def get_walks(graph, n, l, m, p, q):
+    partial_get_walk = partial(_get_walk, graph, l, m, p, q)
+    it = _iterate_nodes(graph, n)
+    with Pool(cpu_count()) as pool:
+        return list(tqdm(
+            pool.imap_unordered(partial_get_walk, it),
+            total=len(graph) * n),
+        )
+
+def _iterate_nodes(graph, num_walks):
+    nodes = list(graph.nodes())
+    for walk_iter in range(num_walks):
+        random.shuffle(nodes)
+        yield from nodes
+
+
+def _get_walk(graph, walk_length, matrix, p, q, start_node):
     """Return a random walk path."""
     walk = [start_node]
+    prev = None
     while len(walk) < walk_length:  # here we may need to consider some dead end issues
         cur = walk[-1]
-        cur_nbrs = sorted(graph.neighbors(cur))  # (G.neighbors(cur))
+        cur_nbrs = list(graph.neighbors(cur))  # (G.neighbors(cur))
 
         if len(cur_nbrs) == 0:
             return walk  # the walk has hit a dead end
         random.shuffle(cur_nbrs)
         if len(walk) == 1:
-            rand = int(np.random.rand() * len(cur_nbrs))
-            next = cur_nbrs[rand]
-            walk.append(next)
+            walk.append(random.choice(cur_nbrs))
         else:
             prev = walk[-2]
 
-            pre_edge_type = graph.edges[prev, cur]['type'] - 1
+            if prev not in graph:
+                print(f'Problem: prev not in graph: {prev}')
+                raise ValueError
+            elif cur not in graph[prev]:
+                print(f'Problem: cur not in graph: {cur}')
+                print(list(graph[prev].keys()))
+                raise ValueError
+
+            pre_edge_type = graph[prev][cur]['type'] - 1
 
             distance_sum = 0
+
             for neighbor in cur_nbrs:
-                neighbor_link = graph.edges[cur, neighbor]
                 # print "neighbor_link: ",neighbor_link
-                neighbor_link_type = neighbor_link['type']
-                # print "neighbor_link_type: ",neighbor_link_type
-                neighbor_link_weight = neighbor_link['weight']
-                transition_probability = matrix[pre_edge_type][neighbor_link_type - 1]
+                neighbor_link_type = graph[cur][neighbor]['type'] - 1
+                # Get transition probability based on the previous edge and the current possible edge
+                transition_probability = matrix[pre_edge_type][neighbor_link_type ]
+
+                neighbor_link_weight = graph[cur][neighbor]['weight']
 
                 if graph.has_edge(neighbor, prev) or graph.has_edge(prev, neighbor):  # undirected graph
                     distance_sum += transition_probability * neighbor_link_weight / p  # +1 normalization
                 elif neighbor == prev:  # decide whether it can random walk back
                     distance_sum += transition_probability * neighbor_link_weight
-                else:
+                else: # Triangle
                     distance_sum += transition_probability * neighbor_link_weight / q
 
             '''
             pick up the next step link
             '''
-
-            rand = np.random.rand() * distance_sum
-            threshold = 0
-            for neighbor in cur_nbrs:
-                neighbor_link = graph[cur][neighbor]
-                # print "neighbor_link: ",neighbor_link
-                neighbor_link_type = neighbor_link['type']
-                # print "neighbor_link_type: ",neighbor_link_type
-                neighbor_link_weight = neighbor_link['weight']
-                transition_probability = matrix[pre_edge_type - 1][neighbor_link_type - 1]
-
-                if graph.has_edge(neighbor, prev) or graph.has_edge(prev, neighbor):  # undirected graph
-
-                    threshold += transition_probability * neighbor_link_weight / p
-                    if threshold >= rand:
-                        next = neighbor
-                        break
-                elif neighbor == prev:
-                    threshold += transition_probability * neighbor_link_weight
-                    if threshold >= rand:
-                        next = neighbor
-                        break
-                else:
-                    threshold += transition_probability * neighbor_link_weight / q
-                    if threshold >= rand:
-                        next = neighbor
-                        break
-
-            walk.append(next)
+            nn = _help_do_my_shit(graph, cur, prev, cur_nbrs, pre_edge_type, matrix, distance_sum, p, q)
+            if nn is not None:
+                walk.append(nn)
+            else:
+                walk.append(random.choice(cur_nbrs))
 
         # print "walk length: ",len(walk),walk
         # print "edge walk: ",len(edge_walk),edge_walk 
     return walk
+
+def _help_do_my_shit(graph, cur, prev, neighbors, pre_edge_type, matrix, d, p, q):
+    rand = np.random.rand() * d
+    threshold = 0
+    for neighbor in neighbors:
+        neighbor_link = graph[cur][neighbor]
+        # print "neighbor_link: ",neighbor_link
+        neighbor_link_type = neighbor_link['type'] - 1
+        # print "neighbor_link_type: ",neighbor_link_type
+        neighbor_link_weight = neighbor_link['weight'] - 1
+        transition_probability = matrix[pre_edge_type ][neighbor_link_type]
+
+        if graph.has_edge(neighbor, prev) or graph.has_edge(prev, neighbor):  # undirected graph
+            threshold += transition_probability * neighbor_link_weight / p
+        elif neighbor == prev:
+            threshold += transition_probability * neighbor_link_weight
+        else:
+            threshold += transition_probability * neighbor_link_weight / q
+
+        if threshold >= rand:
+            return neighbor
 
 
 def main_helper(args):
