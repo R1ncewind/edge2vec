@@ -66,32 +66,20 @@ def parse_args():
     return parser.parse_args()
 
 
-def get_walks_slow(graph, num_walks, walk_length, matrix, p, q):
-    """Generate random walk paths constrainted by transition matrix."""
+def get_walks(graph, num_walks, walk_length, matrix, p, q):
+    """Generate random walk paths constrained by transition matrix"""
     walks = []
-    it = _iterate_nodes(graph, num_walks)
-    for walk_iter in trange(num_walks, desc='Walk Iteration'):
-        walks.append(_get_walk(graph, walk_length, node, matrix, p, q))
+    nodes = list (graph.nodes())
+    for walk_iter in range(num_walks):
+        random.shuffle(nodes)
+        for node in nodes:
+            walks.append(_get_walk(graph, walk_length, node, matrix, p, q))
     return walks
 
 
-def get_walks(graph, n, l, m, p, q):
-    partial_get_walk = partial(_get_walk, graph, l, m, p, q)
-    it = _iterate_nodes(graph, n)
-    with Pool(cpu_count()) as pool:
-        return list(tqdm(
-            pool.imap_unordered(partial_get_walk, it),
-            total=len(graph) * n),
-        )
-
-def _iterate_nodes(graph, num_walks):
-    nodes = list(graph.nodes())
-    for walk_iter in range(num_walks):
-        random.shuffle(nodes)
-        yield from nodes
 
 
-def _get_walk(graph, walk_length, matrix, p, q, start_node):
+def _get_walk(graph, walk_length,start_node,  matrix, p, q):
     """Return a random walk path."""
     walk = [start_node]
     prev = None
