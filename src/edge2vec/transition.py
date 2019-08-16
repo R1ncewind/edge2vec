@@ -10,10 +10,10 @@ import itertools
 import random
 from collections import Counter, defaultdict
 from typing import Any, Iterable, List, Mapping, Optional, Tuple
-
+from functools import partial
 import numpy as np
 from tqdm import tqdm, trange
-
+from multiprocessing import Pool, cpu_count
 from .math import entroy_test, pearsonr_test, spearmanr_test, wilcoxon_test
 from .utils import read_graph
 
@@ -77,6 +77,7 @@ def parse_args():
 
     return parser.parse_args()
 
+Walk = List[int]
 
 def get_edge_walks(
         *,
@@ -88,29 +89,40 @@ def get_edge_walks(
         p,
         q,
         max_count: Optional[int] = None,
-) -> Iterable[int]:
+        use_multiprocessing: bool = True,
+) -> Iterable[Walk]:
     """Generate random walk paths constrained by transition matrix"""
+    if max_count is None:
+        max_count = 1000
+
+    links = _iterate_links(graph, number_walks, max_count)
+
+    partial_get_edge_walk = partial(_get_edge_walk, graph, walk_length, trans_matrix, directed, p, q)
+
+    if use_multiprocessing:
+        with Pool(cpu_count()) as p:
+            rv = p.map(partial_get_edge_walk, links)
+    else:
+        rv = map(partial_get_edge_walk, links)
+
+    return rv
+
+
+def _iterate_links(graph, n_iter, n_links):
     links: Iterable[Edge] = list(graph.edges(data=True))
-    max_count = max_count or 1000
-    it = trange(number_walks, desc='Walk', leave=False)
-    for _ in it:
-        random.shuffle(links)
-        for link, count in zip(links, range(max_count)):
-            # print "chosen link id: ",link[2]['id']
-            yield _get_edge_walk(graph, walk_length, link, trans_matrix, directed, p, q)
-            if count == max_count and graph.number_of_edges() > max_count:  # control the pairwise list length
-                break
+    for _ in range(n_iter):
+        yield np.random.choice(links, size=n_links, replace=False)
 
 
 def _get_edge_walk(
+        start_link: Edge,
         graph,
         walk_length,
-        start_link: Edge,
         matrix,
         is_directed,
         p,
         q,
-) -> List[int]:
+) -> Walk:
     """Return a random walk path of types"""
     # print "start link: ", type(start_link), start_link
     walk = [start_link]
@@ -236,7 +248,7 @@ def get_type_from_link(edge: Edge) -> int:
     return edge[2]['type']
 
 
-def update_trans_matrix(walks, number_edge_types: int, evaluation_test) -> np.ndarray:
+def update_trans_matrix(walks: Iterable[Walk], number_edge_types: int, evaluation_test) -> np.ndarray:
     """E step, update transition matrix."""
     edge_walk_vectors = defaultdict(list)
 
@@ -296,7 +308,7 @@ def calculate_edge_transition_matrix(
         it.write(f"trans_matrix:\n{trans_matrix}")
 
         # M step
-        walks = get_edge_walks(
+        walks: Iterable[Walk] = get_edge_walks(
             graph=graph,
             number_walks=number_walks,
             walk_length=walk_length,

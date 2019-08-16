@@ -72,7 +72,7 @@ def get_walks(graph, num_walks, walk_length, matrix, p, q):
     nodes = list (graph.nodes())
     for walk_iter in range(num_walks):
         random.shuffle(nodes)
-        for node in nodes:
+        for node in tqdm(nodes):
             walks.append(_get_walk(graph, walk_length, node, matrix, p, q))
     return walks
 
