@@ -129,6 +129,8 @@ def _get_walk(graph, walk_length,start_node,  matrix, p, q):
             if nn is not None:
                 walk.append(nn)
             else:
+                print('No neighbour to go!')
+                print(prev,cur)
                 walk.append(random.choice(cur_nbrs))
 
         # print "walk length: ",len(walk),walk

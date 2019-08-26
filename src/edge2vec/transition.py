@@ -286,6 +286,7 @@ def calculate_edge_transition_matrix(
         walk_length: Optional[int] = None,
         p: Optional[float] = None,
         q: Optional[float] = None,
+        max_count:Optional[int] = None
 ) -> np.ndarray:
     # print "------begin to write graph---------"
     # generate_graph_write_edgelist(args.m1,args.m2,args.input)
@@ -316,6 +317,7 @@ def calculate_edge_transition_matrix(
             p=p,
             q=q,
             directed=directed,
+            max_count= max_count
         )
 
         # E step
@@ -337,6 +339,11 @@ def main():
         e_step=args.e_step,
         em_iteration=args.em_iteration,
         directed=args.directed,
+        max_count=args.max_count,
+        p=args.p,
+        q=args.q,
+        number_walks=args.number_walks,
+        walk_length=args.walk_length,
     )
     np.savetxt(args.output, trans_matrix)
 
