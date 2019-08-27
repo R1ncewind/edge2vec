@@ -125,7 +125,7 @@ def _get_walk(graph, walk_length,start_node,  matrix, p, q):
             '''
             pick up the next step link
             '''
-            nn = _help_do_my_shit(graph, cur, prev, cur_nbrs, pre_edge_type, matrix, distance_sum, p, q)
+            nn = pick_neighbors(graph, cur, prev, cur_nbrs, pre_edge_type, matrix, distance_sum, p, q)
             if nn is not None:
                 walk.append(nn)
             else:
@@ -137,7 +137,7 @@ def _get_walk(graph, walk_length,start_node,  matrix, p, q):
         # print "edge walk: ",len(edge_walk),edge_walk 
     return walk
 
-def _help_do_my_shit(graph, cur, prev, neighbors, pre_edge_type, matrix, d, p, q):
+def pick_neighbors(graph, cur, prev, neighbors, pre_edge_type, matrix, d, p, q):
     rand = np.random.rand() * d
     threshold = 0
     for neighbor in neighbors:
