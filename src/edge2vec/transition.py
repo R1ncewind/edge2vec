@@ -101,17 +101,21 @@ def get_edge_walks(
 
     if use_multiprocessing:
         with Pool(cpu_count()) as p:
-            rv = p.map(partial_get_edge_walk, links)
+            print(f'Use multiprocessing {cpu_count()}')
+            rvv = p.map(partial_get_edge_walk, links)
     else:
-        rv = map(partial_get_edge_walk, links)
+        rvv = map(partial_get_edge_walk, links)
 
-    return rv
+    return rvv
 
 
 def _iterate_links(graph, n_iter, n_links):
     links: Iterable[Edge] = list(graph.edges(data=True))
     for _ in range(n_iter):
-        yield np.random.choice(links, size=n_links, replace=False)
+        n=np.random.choice(len(links),size=n_links,replace=False)
+        for i in n:
+            rand=links[i]
+            yield rand
 
 
 def _get_edge_walk(
