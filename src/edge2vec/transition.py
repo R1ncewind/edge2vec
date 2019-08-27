@@ -13,6 +13,7 @@ from collections import Counter, defaultdict
 from typing import Any, Iterable, List, Mapping, Optional, Tuple, Callable
 from functools import partial
 import numpy as np
+import networkx as nx
 from tqdm import tqdm, trange
 from multiprocessing import Pool, cpu_count
 from .math import entroy_test, pearsonr_test, spearmanr_test, wilcoxon_test
@@ -94,14 +95,14 @@ def get_edge_walks(
         max_count = 1000
 
     links: Iterable[Edge]= _iterate_links(graph, number_walks, max_count)
-
+    for i in links:
+        logger.warning(i)
     partial_get_edge_walk: Callable[[Edge], Walk] = partial(_get_edge_walk, graph, walk_length, trans_matrix, is_directed, p, q)
 
     if use_multiprocessing:
         with Pool(cpu_count()) as p:
-            print(f'Use multiprocessing on {cpu_count()} cores')
-            chunksize = 1 + number_walks * max_count // cpu_count()
-            rvv: Iterable[Walk] = p.imap(partial_get_edge_walk, links,chunksize=chunksize)
+            logger.warning(f'Use multiprocessing on {cpu_count()} cores')
+            rvv: Iterable[Walk] = p.map(partial_get_edge_walk, links)
     else:
         rvv: Iterable[Walk] = map(partial_get_edge_walk, links)
 
@@ -271,7 +272,10 @@ def update_trans_matrix(walks: Iterable[Walk], number_edge_types: int, evaluatio
         leave=False,
     )
     for i, j in it:
-        rv[j][i] = rv[i][j] = evaluation_test(edge_walk_vectors[i], edge_walk_vectors[j])
+        if edge_walk_vectors [i]== edge_walk_vectors[j]:
+            break
+        else:
+            rv[j][i] = rv[i][j] = evaluation_test(edge_walk_vectors[i], edge_walk_vectors[j])
 
     return rv
 
