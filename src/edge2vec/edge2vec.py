@@ -4,7 +4,8 @@ use existing matrix to run edge2vec
 
 import argparse
 import random
-from typing import Optional
+from typing import Optional, Callable, Iterable, List
+import logging
 
 import numpy as np
 from gensim.models import Word2Vec
@@ -14,6 +15,11 @@ from tqdm import trange, tqdm
 
 from multiprocessing import Pool, cpu_count
 from functools import partial
+
+logger = logging.getLogger(__name__)
+Walk = List[int]
+
+
 def parse_args():
     '''
     Parses the node2vec arguments.
@@ -66,20 +72,33 @@ def parse_args():
     return parser.parse_args()
 
 
-def get_walks(graph, num_walks, walk_length, matrix, p, q):
+def get_walks(graph, num_walks, walk_length, matrix, p, q, use_multiprocessing: bool = True, ):
     """Generate random walk paths constrained by transition matrix"""
-    walks = []
-    nodes = list (graph.nodes())
-    for walk_iter in range(num_walks):
-        random.shuffle(nodes)
-        for node in tqdm(nodes):
-            walks.append(_get_walk(graph, walk_length, node, matrix, p, q))
+    
+    nodes = list(graph.nodes())
+
+    shuffled_nodes = random.shuffle(nodes)
+    iterated_nodes = iterator_node(shuffled_nodes, num_walks)
+    for node in iterated_nodes:
+        print(node)
+    partial_get_walk = partial(_get_walk, graph, walk_length, matrix, p, q)
+    if use_multiprocessing:
+        with Pool(cpu_count()) as p:
+            logger.warning(f'Use multiprocessing on {cpu_count()} cores')
+            walks = p.map(partial_get_walk, iterated_nodes)
+    else:
+        walks = map(partial_get_walk, iterated_nodes)
+
     return walks
 
 
+def iterator_node(nodes, num_walks):
+    for iter_walk in range(0, num_walks):
+        for node in nodes:
+            yield node
 
 
-def _get_walk(graph, walk_length,start_node,  matrix, p, q):
+def _get_walk(start_node, graph, walk_length, matrix, p, q):
     """Return a random walk path."""
     walk = [start_node]
     prev = None
@@ -111,7 +130,7 @@ def _get_walk(graph, walk_length,start_node,  matrix, p, q):
                 # print "neighbor_link: ",neighbor_link
                 neighbor_link_type = graph[cur][neighbor]['type'] - 1
                 # Get transition probability based on the previous edge and the current possible edge
-                transition_probability = matrix[pre_edge_type][neighbor_link_type ]
+                transition_probability = matrix[pre_edge_type][neighbor_link_type]
 
                 neighbor_link_weight = graph[cur][neighbor]['weight']
 
@@ -119,7 +138,7 @@ def _get_walk(graph, walk_length,start_node,  matrix, p, q):
                     distance_sum += transition_probability * neighbor_link_weight / p  # +1 normalization
                 elif neighbor == prev:  # decide whether it can random walk back
                     distance_sum += transition_probability * neighbor_link_weight
-                else: # Triangle
+                else:  # Triangle
                     distance_sum += transition_probability * neighbor_link_weight / q
 
             '''
@@ -130,12 +149,13 @@ def _get_walk(graph, walk_length,start_node,  matrix, p, q):
                 walk.append(nn)
             else:
                 print('No neighbour to go!')
-                print(prev,cur)
+                print(prev, cur)
                 walk.append(random.choice(cur_nbrs))
 
         # print "walk length: ",len(walk),walk
         # print "edge walk: ",len(edge_walk),edge_walk 
     return walk
+
 
 def pick_neighbors(graph, cur, prev, neighbors, pre_edge_type, matrix, d, p, q):
     rand = np.random.rand() * d
@@ -146,7 +166,7 @@ def pick_neighbors(graph, cur, prev, neighbors, pre_edge_type, matrix, d, p, q):
         neighbor_link_type = neighbor_link['type'] - 1
         # print "neighbor_link_type: ",neighbor_link_type
         neighbor_link_weight = neighbor_link['weight'] - 1
-        transition_probability = matrix[pre_edge_type ][neighbor_link_type]
+        transition_probability = matrix[pre_edge_type][neighbor_link_type]
 
         if graph.has_edge(neighbor, prev) or graph.has_edge(prev, neighbor):  # undirected graph
             threshold += transition_probability * neighbor_link_weight / p
@@ -203,7 +223,6 @@ def train(
         size=size or 100,
         window=window or 5,
     )
-
 
 
 def main():
