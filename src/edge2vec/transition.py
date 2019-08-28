@@ -5,42 +5,48 @@ first version: unweighted, undirected network
 use edge random walk to generate edge transition matrix based on EM algorithm
 """
 
-import argparse
 import itertools
-import random
 import logging
 from collections import Counter, defaultdict
-from typing import Any, Iterable, List, Mapping, Optional, Tuple, Callable
 from functools import partial
-import numpy as np
-import networkx as nx
-from tqdm import tqdm, trange
 from multiprocessing import Pool, cpu_count
+from typing import Any, Iterable, List, Mapping, Optional, Tuple
+
+import networkx as nx
+import numpy as np
+from tqdm import tqdm, trange
+
 from .math import entroy_test, pearsonr_test, spearmanr_test, wilcoxon_test
-from .utils import read_graph
 
 Edge = Tuple[int, int, Mapping[str, Any]]
 Walk = List[int]
 
 logger = logging.getLogger(__name__)
 
+
 def calculate_edge_transition_matrix(
-        *,
-        graph,
-        number_edge_types,
-        directed: bool,
-        e_step: int,
-        em_iteration: int,
-        number_walks: Optional[int] = None,
-        walk_length: Optional[int] = None,
-        p: Optional[float] = None,
-        q: Optional[float] = None,
-        max_count:Optional[int] = None
+    *,
+    graph,
+    directed: bool,
+    e_step: int,
+    em_iteration: int,
+    walk_epochs: Optional[int] = None,
+    walk_length: Optional[int] = None,
+    p: Optional[float] = None,
+    q: Optional[float] = None,
+    walk_sample_size: Optional[int] = None,
+    use_multiprocessing: bool = True,
 ) -> np.ndarray:
     # print "------begin to write graph---------"
     # generate_graph_write_edgelist(args.m1,args.m2,args.input)
 
-    trans_matrix = np.ones(shape=(number_edge_types, number_edge_types)) / (number_edge_types * number_edge_types)
+    edge_types = {
+        data['type']
+        for _, _, data in graph.edges(data=True)
+    }
+    number_edge_types = len(edge_types)
+
+    matrix = np.ones(shape=(number_edge_types, number_edge_types)) / (number_edge_types * number_edge_types)
 
     if e_step == 1 or not e_step:  # default
         evaluation_test = wilcoxon_test
@@ -55,75 +61,85 @@ def calculate_edge_transition_matrix(
 
     it = trange(em_iteration, desc='Expectation/Maximization')
     for _ in it:
-        it.write(f"trans_matrix:\n{trans_matrix}")
-
         # M step
         walks: Iterable[Walk] = get_edge_walks(
             graph=graph,
-            number_walks=number_walks,
+            walk_epochs=walk_epochs,
             walk_length=walk_length,
-            trans_matrix=trans_matrix,
+            matrix=matrix,
             p=p,
             q=q,
             is_directed=directed,
-            max_count= max_count
+            walk_sample_size=walk_sample_size,
+            use_multiprocessing=use_multiprocessing,
         )
 
         # E step
-        trans_matrix = update_trans_matrix(
+        matrix = update_trans_matrix(
             walks=walks,
             number_edge_types=number_edge_types,
             evaluation_test=evaluation_test,
         )
 
-    return trans_matrix
+    return matrix
+
 
 def get_edge_walks(
-        *,
-        graph,
-        number_walks,
-        walk_length,
-        trans_matrix,
-        is_directed,
-        p,
-        q,
-        max_count: Optional[int] = None,
-        use_multiprocessing: bool = True,
+    *,
+    graph,
+    walk_epochs: int,
+    walk_length: int,
+    matrix,
+    is_directed,
+    p,
+    q,
+    walk_sample_size: Optional[int] = None,
+    use_multiprocessing: bool = True,
 ) -> Iterable[Walk]:
-    """Generate random walk paths constrained by transition matrix"""
-    if max_count is None:
-        max_count = 1000
+    """Generate random walk paths constrained by transition matrix."""
+    if walk_sample_size is None:
+        walk_sample_size = 1000
 
-    links: Iterable[Edge]= _iterate_links(graph, number_walks, max_count)
-    for i in links:
-        logger.warning(i)
-    partial_get_edge_walk: Callable[[Edge], Walk] = partial(_get_edge_walk, graph, walk_length, trans_matrix, is_directed, p, q)
-
-    if use_multiprocessing:
-        with Pool(cpu_count()) as p:
-            logger.warning(f'Use multiprocessing on {cpu_count()} cores')
-            rvv: Iterable[Walk] = p.map(partial_get_edge_walk, links)
+    if walk_sample_size > graph.number_of_edges():
+        logger.warning('Can not sample more edges than graph has.')
+        links: Iterable[Edge] = graph.edges(data=True)
     else:
-        rvv: Iterable[Walk] = map(partial_get_edge_walk, links)
+        links: Iterable[Edge] = _iterate_links(graph, walk_epochs, walk_sample_size)
 
-    return rvv
+    _partial_get_edge_walk = partial(
+        _get_edge_walk,
+        graph=graph,
+        walk_length=walk_length,
+        matrix=matrix,
+        is_directed=is_directed,
+        p=p,
+        q=q,
+    )
+
+    if not use_multiprocessing:
+        return map(_partial_get_edge_walk, links)
+
+    with Pool(cpu_count()) as pool:
+        logger.info(f'Use multiprocessing on {cpu_count()} cores')
+        return pool.map(_partial_get_edge_walk, links)
 
 
-def _iterate_links(graph:nx.Graph, n_iter: int, n_links: int) -> Iterable[Edge]:
-    links: Iterable[Edge] = list(graph.edges(data=True))
+def _iterate_links(graph: nx.Graph, n_iter: int, n_links: int) -> Iterable[Edge]:
+    links: List[Edge] = list(graph.edges(data=True))
     for _ in range(n_iter):
-        for i in np.random.choice(len(links),size=n_links,replace=False):
+        for i in np.random.choice(len(links), size=n_links, replace=False):
             yield links[i]
 
 
 def _get_edge_walk(
-        start_link: Edge,
-        graph,
-        walk_length,
-        matrix,
-        is_directed,
-        p,
-        q,
+    start_link: Edge,
+    *,
+    graph,
+    walk_length,
+    matrix,
+    is_directed,
+    p,
+    q,
 ) -> Walk:
     """Return a random walk path of types"""
     # print "start link: ", type(start_link), start_link
@@ -272,88 +288,9 @@ def update_trans_matrix(walks: Iterable[Walk], number_edge_types: int, evaluatio
         leave=False,
     )
     for i, j in it:
-        if edge_walk_vectors [i]== edge_walk_vectors[j]:
+        if edge_walk_vectors[i] == edge_walk_vectors[j]:
             break
         else:
             rv[j][i] = rv[i][j] = evaluation_test(edge_walk_vectors[i], edge_walk_vectors[j])
 
     return rv
-
-
-def parse_args():
-    """Parses the node2vec arguments."""
-    parser = argparse.ArgumentParser(description="Run edge transition matrix.")
-
-    parser.add_argument('--input', nargs='?', default='data.csv',
-                        help='Input graph path')
-
-    parser.add_argument('--output', nargs='?', default='matrix.txt',
-                        help='store transition matrix')
-
-    parser.add_argument('--type_size', type=int, default=3,
-                        help='Number of edge types. Default is 3.')
-
-    parser.add_argument('--em_iteration', default=5, type=int,
-                        help='EM iterations for transition matrix')
-
-    parser.add_argument('--e_step', default=3, type=int,
-                        help='E step in the EM algorithm: there are four expectation metrics')
-
-    parser.add_argument('--dimensions', type=int, default=10,
-                        help='Number of dimensions. Default is 10.')
-
-    parser.add_argument('--walk-length', type=int, default=3,
-                        help='Length of walk per source. Default is 3.')
-
-    parser.add_argument('--num-walks', type=int, default=50,
-                        help='Number of walks per source. Default: %(default)')
-
-    parser.add_argument('--window-size', type=int, default=5,
-                        help='Context size for optimization. Default is 5.')
-
-    parser.add_argument('--iter', default=10, type=int,
-                        help='Number of epochs in SGD')
-
-    parser.add_argument('--workers', type=int, default=8,
-                        help='Number of parallel workers. Default is 8.')
-
-    parser.add_argument('--p', type=float, default=1,
-                        help='Return hyperparameter. Default is 1.')
-
-    parser.add_argument('--q', type=float, default=1,
-                        help='Inout hyperparameter. Default is 1.')
-
-    # dest='weighted' means the arg parameter name is weighted.
-    # There is only one parameter: args.weighted
-    parser.add_argument('--weighted', dest='weighted', action='store_true',
-                        help='Boolean specifying (un)weighted. Default is unweighted.')
-    parser.add_argument('--unweighted', dest='weighted', action='store_false')
-    parser.set_defaults(weighted=False)
-
-    parser.add_argument('--directed', dest='directed', action='store_true',
-                        help='Graph is (un)directed. Default is undirected.')
-    parser.add_argument('--undirected', dest='directed', action='store_false')
-    parser.set_defaults(directed=False)
-
-    return parser.parse_args()
-
-def main():
-    args = parse_args()
-    graph = read_graph(path=args.input, weighted=args.weighted, directed=args.directed)
-    trans_matrix = calculate_edge_transition_matrix(
-        graph=graph,
-        number_edge_types=args.type_size,
-        e_step=args.e_step,
-        em_iteration=args.em_iteration,
-        directed=args.directed,
-        max_count=args.max_count,
-        p=args.p,
-        q=args.q,
-        number_walks=args.number_walks,
-        walk_length=args.walk_length,
-    )
-    np.savetxt(args.output, trans_matrix)
-
-
-if __name__ == "__main__":
-    main()
