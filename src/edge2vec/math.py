@@ -8,7 +8,7 @@ from scipy import spatial, stats
 
 __all__ = [
     'wilcoxon_test',
-    'entroy_test',
+    'entropy_test',
     'spearmanr_test',
     'pearsonr_test',
 ]
@@ -21,7 +21,7 @@ def wilcoxon_test(v1, v2) -> float:  # original metric: the smaller the more sim
     return 1 / (math.sqrt(statistic) + 1)
 
 
-def entroy_test(v1, v2) -> float:  # original metric: the smaller the more similar
+def entropy_test(v1, v2) -> float:  # original metric: the smaller the more similar
     result = stats.entropy(v1, v2)
     if result != result:
         result = 0

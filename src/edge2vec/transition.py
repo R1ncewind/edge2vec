@@ -16,7 +16,7 @@ import networkx as nx
 import numpy as np
 from tqdm import tqdm, trange
 
-from .math import entroy_test, pearsonr_test, spearmanr_test, wilcoxon_test
+from .math import entropy_test, pearsonr_test, spearmanr_test, wilcoxon_test
 
 Edge = Tuple[int, int, Mapping[str, Any]]
 Walk = List[int]
@@ -51,7 +51,7 @@ def calculate_edge_transition_matrix(
     if e_step == 1 or not e_step:  # default
         evaluation_test = wilcoxon_test
     elif e_step == 2:
-        evaluation_test = entroy_test
+        evaluation_test = entropy_test
     elif e_step == 3:
         evaluation_test = spearmanr_test
     elif e_step == 4:

@@ -3,18 +3,16 @@ use existing matrix to run edge2vec
 '''
 
 import argparse
-import random
-from typing import Optional, Callable, Iterable, List
 import logging
+import random
+from functools import partial
+from multiprocessing import Pool, cpu_count
+from typing import List, Optional
 
 import numpy as np
 from gensim.models import Word2Vec
 
 from .utils import read_graph
-from tqdm import trange, tqdm
-
-from multiprocessing import Pool, cpu_count
-from functools import partial
 
 logger = logging.getLogger(__name__)
 Walk = List[int]
@@ -74,7 +72,7 @@ def parse_args():
 
 def get_walks(graph, num_walks, walk_length, matrix, p, q, use_multiprocessing: bool = True, ):
     """Generate random walk paths constrained by transition matrix"""
-    
+
     nodes = list(graph.nodes())
 
     shuffled_nodes = random.shuffle(nodes)
@@ -200,15 +198,15 @@ def main_helper(args):
 
 
 def train(
-        *,
-        transition_matrix,
-        graph,
-        number_walks: Optional[int] = None,
-        walk_length: Optional[int] = None,
-        p: Optional[float] = None,
-        q: Optional[float] = None,
-        window: Optional[int] = None,
-        size: Optional[int] = None,
+    *,
+    transition_matrix,
+    graph,
+    number_walks: Optional[int] = None,
+    walk_length: Optional[int] = None,
+    p: Optional[float] = None,
+    q: Optional[float] = None,
+    window: Optional[int] = None,
+    size: Optional[int] = None,
 ) -> Word2Vec:
     walks = get_walks(
         graph,
