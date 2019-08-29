@@ -126,14 +126,16 @@ def get_edge_walks(
     with Pool(cpu_count()) as pool:
         logger.info(f'Use multiprocessing on {cpu_count()} cores')
         chunksize=len(links)//cpu_count()
-        return pool.map(_partial_get_edge_walk, links,chunksize=chunksize)
+        return pool.map(_partial_get_edge_walk, links, chunksize=chunksize)
 
 
 def _iterate_links(graph: nx.Graph, n_iter: int, n_links: int) -> Iterable[Edge]:
     links: List[Edge] = list(graph.edges(data=True))
+    start_edges=[]
     for _ in range(n_iter):
         for i in np.random.choice(len(links), size=n_links, replace=False):
-            yield links[i]
+            start_edges.append(links[i])
+    return start_edges
 
 
 def _get_edge_walk(
