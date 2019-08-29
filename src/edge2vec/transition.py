@@ -117,11 +117,16 @@ def get_edge_walks(
     )
 
     if not use_multiprocessing:
-        return map(_partial_get_edge_walk, links)
+        walks = []
+        for i in links:
+            walks.append(_partial_get_edge_walk(i))
+
+        return walks
 
     with Pool(cpu_count()) as pool:
         logger.info(f'Use multiprocessing on {cpu_count()} cores')
-        return pool.map(_partial_get_edge_walk, links)
+        chunksize=len(links)//cpu_count()
+        return pool.map(_partial_get_edge_walk, links,chunksize=chunksize)
 
 
 def _iterate_links(graph: nx.Graph, n_iter: int, n_links: int) -> Iterable[Edge]:
