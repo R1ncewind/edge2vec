@@ -82,7 +82,7 @@ def get_walks(graph, num_walks, walk_length, matrix, p, q, use_multiprocessing: 
             logger.warning(f'Use multiprocessing on {cpu_count()} cores')
             chunksize=len(shuffled_nodes)//cpu_count()
             walks = p.map(partial_get_walk, shuffled_nodes,chunksize=chunksize)
-            print(walks)
+
     else:
         walks = []
         for node in nodes:
@@ -214,6 +214,7 @@ def train(
         walks,
         size=size or 100,
         window=window or 5,
+        min_count=1
     )
 
 
