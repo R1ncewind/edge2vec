@@ -124,7 +124,7 @@ def get_edge_walks(
         return walks
 
     with Pool(cpu_count()) as pool:
-        logger.info(f'Use multiprocessing on {cpu_count()} cores')
+        logger.warning(f'Use multiprocessing on {cpu_count()} cores')
         chunksize=len(links)//cpu_count()
         return pool.map(_partial_get_edge_walk, links, chunksize=chunksize)
 
