@@ -36,7 +36,7 @@ def spearmanr_test(v1, v2) -> float:  # original metric: the larger the more sim
 
 
 def pearsonr_test(v1, v2) -> float:  # original metric: the larger the more similar
-    pearsonr = stats.mstats.pearsonr(v1, v2)
+    pearsonr = stats.mstats.pearsonr(v1, v2)[0]
     if pearsonr != pearsonr:
         pearsonr = -1
     return sigmoid(pearsonr)
