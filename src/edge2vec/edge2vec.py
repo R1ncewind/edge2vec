@@ -212,7 +212,7 @@ def train(
     )
     return Word2Vec(
         walks,
-        size=size or 100,
+        vector_size=size or 100,
         window=window or 5,
         min_count=1
     )
